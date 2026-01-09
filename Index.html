@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio de Guiones</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Source+Sans+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #101010;
+            --bg-card: #1C1C1C;
+            --border-color: #2D2D2D;
+            --text-primary: #EDEDED;
+            --text-secondary: #9E9E9E;
+            --accent-green: #10B981;
+            --accent-green-hover: #059669;
+        }
+        body {
+            font-family: 'Source Sans Pro', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+        }
+        h1, button, .duration-btn {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+        }
+        .loader {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-green);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .duration-btn {
+            transition: all 0.2s ease-in-out;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-card);
+        }
+        .duration-btn.selected {
+            background-color: var(--accent-green);
+            color: var(--text-primary);
+            border-color: var(--accent-green);
+        }
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+            -webkit-text-fill-color: #000000 !important;
+            -webkit-box-shadow: 0 0 0 30px #e5e7eb inset !important;
+            box-shadow: 0 0 0 30px #e5e7eb inset !important;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <main class="container mx-auto px-4 py-16 flex justify-center items-center min-h-screen">
+        
+        <div class="w-full max-w-xl">
+            <header class="text-center mb-10">
+                <h1 class="text-4xl md:text-5xl font-bold text-white">
+                    STUDIO DE GUIONES
+                </h1>
+                <p class="mt-2 text-lg text-text-secondary">Tu idea. Nuestra ejecución.</p>
+            </header>
+
+            <div class="bg-bg-card p-8 rounded-lg shadow-2xl border border-border-color space-y-8">
+                <form id="script-form" class="space-y-6">
+                    <div>
+                        <label for="tema" class="block text-sm font-semibold text-text-secondary mb-2">Paso 1: Tema o Personaje</label>
+                        <div class="flex gap-3">
+                            <input type="text" id="tema" class="flex-grow w-full px-4 py-2 bg-gray-200 text-black placeholder-gray-500 border border-border-color rounded-md focus:ring-2 focus:ring-accent-green focus:border-accent-green transition" placeholder="Ej: David y Goliat" required>
+                            <button type="button" id="suggest-title-btn" title="Sobrescribirá el tema con un título viral" class="text-white font-semibold py-2 px-4 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors whitespace-nowrap">Sugerir Título SEO</button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-text-secondary mb-2">Paso 2: Duración</label>
+                        <div id="duration-selector" class="grid grid-cols-2 gap-3">
+                            <button type="button" class="duration-btn py-3 px-4 rounded-md selected" data-duration="10">10 MIN</button>
+                            <button type="button" class="duration-btn py-3 px-4 rounded-md" data-duration="25">25 MIN</button>
+                        </div>
+                         <input type="hidden" id="duracion" value="10">
+                    </div>
+
+                    <button type="submit" id="generate-btn" class="w-full text-white font-bold py-4 px-6 rounded-lg bg-accent-green hover:bg-accent-green-hover focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-all duration-300 text-lg uppercase tracking-wider shadow-lg shadow-green-500/20">
+                        Paso 3: Generar Guion
+                    </button>
+                </form>
+
+                <div id="status-area" class="mt-6 text-center h-10 flex justify-center items-center"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+
+        const form = document.getElementById('script-form');
+        const generateBtn = document.getElementById('generate-btn');
+        const durationSelector = document.getElementById('duration-selector');
+        const hiddenDurationInput = document.getElementById('duracion');
+        const statusArea = document.getElementById('status-area');
+        const suggestTitleBtn = document.getElementById('suggest-title-btn');
+        const temaInput = document.getElementById('tema');
+        
+        const apiKey = "";
+
+        durationSelector.addEventListener('click', (e) => {
+            if (e.target.classList.contains('duration-btn')) {
+                document.querySelectorAll('.duration-btn').forEach(btn => btn.classList.remove('selected'));
+                e.target.classList.add('selected');
+                hiddenDurationInput.value = e.target.dataset.duration;
+            }
+        });
+
+        suggestTitleBtn.addEventListener('click', async () => {
+            const temaBase = temaInput.value;
+            if (!temaBase) {
+                showStatus("error", "Introduce un tema base para sugerir un título.");
+                return;
+            }
+            
+            suggestTitleBtn.disabled = true;
+            suggestTitleBtn.innerHTML = '<div class="loader mx-auto"></div>';
+            showStatus("info", "Analizando tendencias virales...");
+
+            try {
+                const titlePrompt = `Actúa como un estratega de contenido viral de YouTube de élite. Basado en el tema "${temaBase}", crea UN ÚNICO título de video. REGLAS INNEGOCIABLES: 1. **Límite de Caracteres Estricto:** El título debe tener aproximadamente 70 caracteres y NUNCA superar los 100 caracteres para una visualización perfecta en móviles. 2. **Máximo Click-Through Rate (CTR):** Debe ser magnético, generando un nivel extremo de curiosidad, suspenso o controversia que obligue al usuario a hacer clic. 3. **SEO Optimizado:** Debe ser altamente buscable en YouTube. 4. **Formato:** Devuelve solo el texto del título, sin numeración, comillas ni explicaciones.`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ parts: [{ text: titlePrompt }] }] };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error('Error al contactar la API de títulos.');
+
+                const result = await response.json();
+                const suggestedTitle = result.candidates[0]?.content?.parts[0]?.text;
+                if(suggestedTitle) {
+                    temaInput.value = suggestedTitle.trim().replace(/^"|"$/g, '');
+                    showStatus("success", "Título SEO aplicado.");
+                } else {
+                    throw new Error('No se pudo generar un título.');
+                }
+            } catch (error) {
+                showStatus("error", error.message);
+            } finally {
+                suggestTitleBtn.disabled = false;
+                suggestTitleBtn.textContent = 'Sugerir Título SEO';
+            }
+        });
+
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const tema = temaInput.value;
+            const duracion = hiddenDurationInput.value;
+            const palabrasObjetivo = duracion * 160;
+
+            if (!tema) {
+                showStatus("error", "Por favor, completa el tema.");
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const internalPrompt = buildInternalPrompt(tema, palabrasObjetivo);
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: internalPrompt }] }],
+                    generationConfig: {
+                        maxOutputTokens: 8192,
+                        temperature: 0.85,
+                        topP: 0.95,
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    const errorMessage = errorData.error?.message || `Error en la API: ${response.status} ${response.statusText}`;
+                    throw new Error(errorMessage);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates[0]?.content?.parts) {
+                    const generatedText = result.candidates[0].content.parts[0].text;
+                    showStatus("success", "¡Guion completado! Descargando PDF...");
+                    downloadPDF(generatedText, tema);
+                } else if (result.candidates && result.candidates[0].finishReason === 'MAX_TOKENS') {
+                     throw new Error("La respuesta fue demasiado larga. Intenta con una duración menor.");
+                } else {
+                    console.dir(result);
+                    throw new Error("Respuesta inválida del modelo. Intenta de nuevo.");
+                }
+
+            } catch (error) {
+                console.error("Error al generar el guion:", error);
+                showStatus("error", error.message || "Un error inesperado ocurrió.");
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        function setLoading(isLoading) {
+            statusArea.innerHTML = '';
+            if (isLoading) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<div class="flex items-center justify-center"><div class="loader mr-3"></div><span>GENERANDO...</span></div>';
+            } else {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = 'Generar Guion';
+            }
+        }
+        
+        function showStatus(type, message) {
+            statusArea.innerHTML = '';
+            const statusMessage = document.createElement('p');
+            statusMessage.textContent = message;
+            if (type === 'error') {
+                statusMessage.className = 'text-red-500 font-semibold text-sm';
+            } else if (type === 'success') {
+                statusMessage.className = 'text-green-500 font-semibold text-sm';
+            } else {
+                 statusMessage.className = 'text-cyan-400 font-semibold text-sm animate-pulse';
+            }
+            statusArea.appendChild(statusMessage);
+        }
+
+        function buildInternalPrompt(tema, palabrasObjetivo) {
+            const act1Words = Math.floor(palabrasObjetivo * 0.15);
+            const act2Words = Math.floor(palabrasObjetivo * 0.70);
+            const act3Words = Math.floor(palabrasObjetivo * 0.15);
+
+            return `
+### DIRECTIVA SUPREMA E INNEGOCIABLE
+Tu única función es actuar como un maestro narrador y estratega de contenido viral. Debes convertir el tema proporcionado en una leyenda épica, siguiendo las órdenes del usuario (el director) sin cuestionarlas. El guion debe ser una obra maestra de storytelling de acción y suspenso, optimizada para la máxima retención de audiencia (anti-scroll) y el impacto emocional.
+
+### FASE 1: ANÁLISIS ESTRATÉGICO (SEO Y VIRALIDAD)
+Antes de escribir una sola palabra, analiza el tema "${tema}" y determina el ángulo narrativo con mayor potencial viral. Considera: ¿Qué preguntas busca responder la gente sobre este tema? ¿Qué faceta de la historia es la más dramática o menos conocida? ¿Qué estructura generará más suspenso? Basa la narrativa en este análisis.
+
+### PARÁMETROS DEL DIRECTOR (EL USUARIO)
+* **Tema Central / Personaje:** ${tema}
+
+### REGLAS CREATIVAS (ESTILO OBLIGATORIO)
+
+1.  **IDIOMA (REGLA SUPREMA E INNEGOCIABLE):**
+    * **PROHIBIDO TERMINANTEMENTE:** El uso de "vosotros", "vuestro", "sois", "habéis", o cualquier conjugación, pronombre o posesivo del español de España (castellano). CUALQUIER USO DE ESTOS TÉRMINOS ES UN FRACASO ABSOLUTO DE LA TAREA.
+    * **OBLIGATORIO:** El guion debe estar escrito en **Español Neutro Latinoamericano**. Utiliza "ustedes" para el plural, con sus conjugaciones correctas ("son", "tienen", "hacen"). El tono debe ser épico y poderoso, pero 100% latinoamericano.
+
+2.  **LENGUAJE Y VOCABULARIO:**
+    * **CLARIDAD ABSOLUTA:** Utiliza un lenguaje potente y evocador, pero siempre fácil de comprender para una audiencia general.
+    * **PROHIBIDO:** Palabras arcaicas, raras, innecesariamente complejas o con posibles dobles sentidos (ejemplos: "sátrapas", "anales"). Si una palabra puede ser malinterpretada o no es de uso común, reemplázala. El objetivo es la inmersión, no la confusión.
+
+3.  **HOOK (REGLA DE ORO / ANTI-SCROLL):**
+    * El guion DEBE empezar con **UNA ÚNICA FRASE CORTA, PROFUNDA E IMPACTANTE.** NO un párrafo.
+    * Debe ser un hecho contraintuitivo, una pregunta filosófica corta o una declaración que genere un misterio inmediato.
+    * **EJEMPLO DE CALIDAD A SEGUIR:** "El verdadero milagro no fue el silencio, sino el abismo que Daniel cruzó antes de que los leones abrieran la boca."
+    * **PROHIBIDO:** Párrafos largos, múltiples preguntas, poesía, descripciones lentas.
+
+4.  **NARRATIVA DE ACCIÓN Y SUSPENSO (MISIÓN PRINCIPAL):**
+    * **ENFOQUE TOTAL EN "QUÉ PASÓ":** Narra únicamente los eventos y las acciones de forma directa y visceral. Construye tensión antes de la acción.
+    * **PREGUNTAS RETÓRICAS:** Inserta preguntas cortas y directas (una frase) a lo largo de la narración para hacer que el oyente piense y se involucre. Ejemplo: "¿Pero qué oportunidad tiene un pastor contra un gigante?" o "¿Era valentía, o era una locura?".
+
+5.  **STORYTELLING (NARRATIVA CINEMÁTICA, CERO GRASA):**
+    * **RITMO:** Párrafos cortos. Frases directas y afiladas. Cero relleno.
+    * **CIERRE Y LLAMADO A LA ACCIÓN:**
+        * **Cierre Potente:** Termina con una reflexión final poderosa.
+        * **Pregunta de Interacción:** Justo después, haz una pregunta abierta y directa para fomentar los comentarios.
+        * **Llamado al Canal:** Concluye con una frase final que invite a suscribirse para apoyar la creación de más contenido. Ejemplo: "Si estas historias merecen ser contadas, apoya este canal con tu suscripción."
+
+### REGLAS TÉCNICAS (CONTRATO INQUEBRANTABLE)
+
+1.  **LONGITUD EXACTA:**
+    * **Objetivo Final:** **${palabrasObjetivo} palabras**.
+    * **Margen de Error:** +/- 200 palabras. NO MÁS.
+    * **Mandato:** Es tu responsabilidad expandir la narrativa con más acción, descripciones sensoriales y detalle de los eventos para alcanzar esta meta. El guion debe estructurarse así para garantizar la longitud:
+        * **Acto 1 (Hook y Planteamiento):** ~${act1Words} palabras.
+        * **Acto 2 (Nudo y Conflicto):** ~${act2Words} palabras.
+        * **Acto 3 (Clímax y Cierre):** ~${act3Words} palabras.
+
+2.  **FORMATO DE SALIDA PURO:**
+    * **PROHIBIDO:** Títulos, nombres de personaje ("NARRADOR:"), marcadores de escena ("ESCENA 1"), símbolos ("***"), o cualquier texto que no sea la narración pura.
+    * **Resultado:** Un bloque de texto continuo listo para ser grabado, comenzando directamente con el hook.
+            `;
+        }
+
+        function downloadPDF(text, tema) {
+            try {
+                const doc = new jsPDF();
+                
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(11);
+
+                const pageHeight = doc.internal.pageSize.height || doc.internal.pageSize.getHeight();
+                const pageWidth = doc.internal.pageSize.width || doc.internal.pageSize.getWidth();
+                const margin = 15;
+                const maxWidth = pageWidth - margin * 2;
+                
+                const lines = doc.splitTextToSize(text, maxWidth);
+                let y = margin;
+
+                lines.forEach(line => {
+                    if (y + 7 > pageHeight - margin) { // line height approx 7
+                        doc.addPage();
+                        y = margin;
+                    }
+                    doc.text(line, margin, y);
+                    y += 7;
+                });
+                
+                const safeFileName = tema.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                doc.save(`guion_${safeFileName || 'epico'}.pdf`);
+            } catch (error) {
+                console.error("Error al generar el PDF:", error);
+                showStatus("error", "Hubo un problema al crear el PDF.");
+            }
+        }
+    </script>
+
+</body>
+</html>
